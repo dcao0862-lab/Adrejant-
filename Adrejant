@@ -1,0 +1,261 @@
+do
+    local Players = game:GetService("Players")
+    local TweenService = game:GetService("TweenService")
+    local player = Players.LocalPlayer
+    local playerGui = player:WaitForChild("PlayerGui")
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "DeleteHighPartsTool"
+    screenGui.ResetOnSpawn = false
+    screenGui.IgnoreGuiInset = true
+    screenGui.Parent = playerGui
+
+    local deleteBtn = Instance.new("TextButton")
+    deleteBtn.Size = UDim2.new(0, 150, 0, 36)
+    deleteBtn.Position = UDim2.new(0.5, -75, 1, -60) 
+    deleteBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+    deleteBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    deleteBtn.Font = Enum.Font.GothamBold
+    deleteBtn.TextSize = 12
+    deleteBtn.Text = "🗑 XOÁ > 35 STUDS"
+    deleteBtn.Active = true
+    deleteBtn.Draggable = true 
+    deleteBtn.Parent = screenGui
+
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, 6)
+    uiCorner.Parent = deleteBtn
+
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = Color3.fromRGB(255, 255, 255)
+    uiStroke.Thickness = 1.5
+    uiStroke.Transparency = 0.5
+    uiStroke.Parent = deleteBtn
+
+    local uiScale = Instance.new("UIScale")
+    uiScale.Parent = deleteBtn
+    if workspace.CurrentCamera.ViewportSize.Y < 500 then
+        uiScale.Scale = 0.85
+    end
+
+    local function tweenColor(targetColor, targetText, targetStrokeTransparency)
+        TweenService:Create(deleteBtn, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = targetColor}):Play()
+        if targetText then deleteBtn.Text = targetText end
+        if targetStrokeTransparency then
+            TweenService:Create(uiStroke, TweenInfo.new(0.3), {Transparency = targetStrokeTransparency}):Play()
+        end
+    end
+
+    local isDeleting = false
+
+    deleteBtn.MouseButton1Click:Connect(function()
+        if isDeleting then return end
+        
+        local character = player.Character
+        if not character then return end
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        isDeleting = true
+        tweenColor(Color3.fromRGB(200, 150, 50), "⏳ ĐANG QUÉT...", 0.2)
+
+        local thresholdY = hrp.Position.Y + 35
+        
+        local partsToDelete = {}
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and not obj:IsDescendantOf(character) then
+                if obj.Position.Y > thresholdY then
+                    table.insert(partsToDelete, obj)
+                end
+            end
+        end
+
+        local deletedCount = #partsToDelete
+
+        for _, part in ipairs(partsToDelete) do
+            part.Parent = nil 
+        end
+
+        if deletedCount > 0 then
+            tweenColor(Color3.fromRGB(50, 180, 80), "✅ ĐÃ XOÁ " .. deletedCount .. " PART", 0.5)
+        else
+            tweenColor(Color3.fromRGB(100, 100, 100), "Không có part nào > 35s", 0.5)
+        end
+
+        task.spawn(function()
+            local batchSize = 20
+            for i = 1, deletedCount, batchSize do
+                for j = i, math.min(i + batchSize - 1, deletedCount) do
+                    local p = partsToDelete[j]
+                    if p then
+                        p:Destroy()
+                    end
+                end
+                task.wait()
+            end
+        end)
+
+        task.wait(2.5)
+        tweenColor(Color3.fromRGB(220, 50, 50), "🗑 XOÁ > 35 STUDS", 0.5)
+        task.wait(0.2)
+        isDeleting = false
+    end)
+end
+
+do
+    local player = game.Players.LocalPlayer
+    local workspace = game:GetService("Workspace")
+    local players = game:GetService("Players")
+
+    local MAX_SIZE = 5
+
+    local KEEP_NAMES = {
+        "Medkit", "Cola", "Item", "Loot", "Pickup", "Weapon", "Gun", "Tool", 
+        "Health", "Potion", "Food", "Drink", "Ammo", "Key", "Coin", "Cash"
+    }
+
+    local ALWAYS_DELETE_NAMES = {
+        "Leaf", "Vine", "Bamboo", "Grass", "Smoke", "Fire", "Sparkles", 
+        "Debris", "Web", "Cobweb", "Particle"
+    }
+
+    local function isLightSource(part)
+        if part:FindFirstChildOfClass("PointLight") then return true end
+        if part:FindFirstChildOfClass("SpotLight") then return true end
+        if part:FindFirstChildOfClass("SurfaceLight") then return true end
+
+        if part.Material == Enum.Material.Neon then return true end
+        if part.Material == Enum.Material.Glass then return true end
+
+        local nameLower = string.lower(part.Name)
+        local lightKeywords = {"light", "lamp", "lantern", "candle", "torch", "neon", "glow", "bulb", "fire"}
+        for _, keyword in pairs(lightKeywords) do
+            if string.find(nameLower, keyword) then
+                return true
+            end
+        end
+
+        return false
+    end
+
+    local function isPlayerPart(part)
+        for _, p in ipairs(players:GetPlayers()) do
+            if p.Character and part:IsDescendantOf(p.Character) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function isTrash(part)
+        for _, keepName in pairs(KEEP_NAMES) do
+            if string.find(string.lower(part.Name), string.lower(keepName)) then
+                return false
+            end
+        end
+
+        for _, delName in pairs(ALWAYS_DELETE_NAMES) do
+            if part.Name == delName then
+                return true
+            end
+        end
+
+        local size = part.Size
+        if size.X <= MAX_SIZE and size.Y <= MAX_SIZE and size.Z <= MAX_SIZE then
+            return true
+        end
+
+        return false
+    end
+
+    local function cleanMap()
+        local count = 0
+        local protectedLights = 0
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                if obj:IsA("Terrain") then continue end
+                if isPlayerPart(obj) then continue end
+
+                if isLightSource(obj) then
+                    protectedLights = protectedLights + 1
+                    continue
+                end
+
+                if isTrash(obj) then
+                    if not obj.CanCollide or (obj.Size.X <= 2 and obj.Size.Y <= 2 and obj.Size.Z <= 2) then
+                        obj:Destroy()
+                        count = count + 1
+                    end
+                end
+            end
+        end
+        print(string.format("[Tối ưu hóa] Đã xóa %d part rác | Bảo vệ %d nguồn sáng!", count, protectedLights))
+        return count, protectedLights
+    end
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "CleanerGuiManual"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = player:WaitForChild("PlayerGui")
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 60, 0, 60)
+    btn.Position = UDim2.new(0.85, 0, 0.75, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.BackgroundTransparency = 0.2
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Text = "XÓA\nRÁC"
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 12
+    btn.Active = true
+    btn.Draggable = true
+    btn.Parent = screenGui
+
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 30)
+
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(0, 220, 0, 30)
+    statusLabel.Position = UDim2.new(0.5, -110, 0.68, 0)
+    statusLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    statusLabel.BackgroundTransparency = 0.5
+    statusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+    statusLabel.Font = Enum.Font.SourceSansBold
+    statusLabel.TextSize = 12
+    statusLabel.Visible = false
+    statusLabel.Parent = screenGui
+
+    local statusCorner = Instance.new("UICorner", statusLabel)
+    statusCorner.CornerRadius = UDim.new(0, 8)
+
+    btn.MouseButton1Click:Connect(function()
+        local deleted, lights = cleanMap()
+        statusLabel.Text = string.format("Đã xóa %d rác | Giữ %d đèn!", deleted, lights)
+        statusLabel.Visible = true
+        task.wait(2)
+        statusLabel.Visible = false
+    end)
+end
+
+do
+    local Lighting = game:GetService("Lighting")
+
+    local function boostLighting()
+        Lighting.Brightness = 1.5
+        Lighting.ExposureCompensation = 2
+        Lighting.Ambient = Color3.fromRGB(150, 150, 150)
+        Lighting.OutdoorAmbient = Color3.fromRGB(150, 150, 150)
+        Lighting.FogEnd = 999999
+    end
+
+    boostLighting()
+
+    task.spawn(function()
+        while true do
+            boostLighting()
+            task.wait(1)
+        end
+    end)
+
+    print("Chế độ 'Đèn Pha' đã được kích hoạt thành công!")
+end
