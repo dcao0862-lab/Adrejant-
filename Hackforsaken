@@ -1,0 +1,272 @@
+-- ============================================================
+-- FORSAKEN - POV + FEATURES (Tích hợp Zentrix UI)
+-- ============================================================
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Iliankytb/Iliankytb/main/Zentrix"))()
+
+library:CreateWindow({
+    Title = "Forsaken - POV + Features",
+    Theme = "Default",
+    Icon = 0,
+    Intro = false,
+    KeyPC = Enum.KeyCode.K,
+    Data = {
+        EnableSavingData = false,
+        FolderName = "ForsakenSelect",
+        FileName = "Config",
+    },
+    Discord = { Enabled = false },
+    KeySystem = false,
+}, function(window)
+
+    -- ============ Services ============
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- ============ POV Variables ============
+    local OldFOV = 80
+    pcall(function()
+        OldFOV = LocalPlayer.PlayerData.Settings.Game.FieldOfView.Value
+    end)
+    local ValueFieldOfView = OldFOV
+    local ActiveModifiedFieldOfView = false
+
+    -- ============ Forsaken Variables ============
+    local ActiveEspSurvivors = false
+    local ActiveEspKillers = false
+    local ActiveAutoKillSurvivors = false
+    local ActiveAutoGenerator = false
+    local ActiveInfiniteStamina = false
+    local ESPs = {}
+    local Timer = 0
+    local Delay = 2.5
+    local CanAutoGenFixGlitchs = true
+
+    -- ============ Helper: Create ESP ============
+    local function CreateEsp(Char, Color, Text, Parent, Num)
+        if not Char or not Parent then return end
+        if Char:FindFirstChild("ESP_Highlight") or Parent:FindFirstChild("ESP") then return end
+
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESP_Highlight"
+        highlight.Adornee = Char
+        highlight.FillColor = Color
+        highlight.FillTransparency = 0.5
+        highlight.OutlineColor = Color
+        highlight.OutlineTransparency = 0
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Enabled = true
+        highlight.Parent = Char
+
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "ESP"
+        billboard.Size = UDim2.new(0, 50, 0, 25)
+        billboard.AlwaysOnTop = true
+        billboard.StudsOffset = Vector3.new(0, Num, 0)
+        billboard.Adornee = Parent
+        billboard.Enabled = true
+        billboard.Parent = Parent
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = Text
+        label.TextColor3 = Color
+        label.TextScaled = true
+        label.Parent = billboard
+
+        table.insert(ESPs, {
+            Char = Char,
+            Highlight = highlight,
+            Billboard = billboard,
+            Part = Parent
+        })
+    end
+
+    -- ============ Helper: Remove ESP ============
+    local function ClearEsp(Char)
+        for i = #ESPs, 1, -1 do
+            local esp = ESPs[i]
+            if esp.Char == Char then
+                if esp.Highlight then esp.Highlight:Destroy() end
+                if esp.Billboard then esp.Billboard:Destroy() end
+                table.remove(ESPs, i)
+            end
+        end
+    end
+
+    -- ============ Main Loop ============
+    RunService.RenderStepped:Connect(function(dt)
+        -- [POV] Cập nhật FOV liên tục
+        if ActiveModifiedFieldOfView then
+            pcall(function()
+                LocalPlayer.PlayerData.Settings.Game.FieldOfView.Value = ValueFieldOfView
+            end)
+            workspace.CurrentCamera.FieldOfView = ValueFieldOfView
+        end
+
+        -- [Forsaken] Infinite Stamina
+        if ActiveInfiniteStamina then
+            pcall(function()
+                local m = require(ReplicatedStorage.Systems.Character.Game.Sprinting)
+                m.StaminaLossDisabled = true
+                m.Stamina = 9999999
+            end)
+        end
+
+        -- [Forsaken] Auto Kill Survivors
+        if ActiveAutoKillSurvivors then
+            pcall(function()
+                local survivors = workspace.Players.Survivors:GetChildren()
+                for _, target in pairs(survivors) do
+                    if target:IsA("Model") and target:FindFirstChild("HumanoidRootPart")
+                        and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = target.HumanoidRootPart.CFrame
+                        local RemoteEvent = ReplicatedStorage.Modules.Network.RemoteEvent
+                        RemoteEvent:FireServer("UseActorAbility", "Slash")
+                    end
+                end
+            end)
+        end
+
+        -- [Forsaken] Auto Generator
+        if ActiveAutoGenerator and CanAutoGenFixGlitchs then
+            Timer += dt
+            if Timer >= Delay then
+                Timer = 0
+                CanAutoGenFixGlitchs = false
+                task.spawn(function()
+                    pcall(function()
+                        local map = workspace.Map.Ingame:FindFirstChild("Map")
+                        if map then
+                            for _, obj in pairs(map:GetChildren()) do
+                                if obj:IsA("Model") and obj.Name == "Generator" then
+                                    local remoteFolder = obj:FindFirstChild("Remotes")
+                                    if remoteFolder and remoteFolder:FindFirstChild("RE") then
+                                        remoteFolder.RE:FireServer()
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                    CanAutoGenFixGlitchs = true
+                end)
+            end
+        end
+    end)
+
+    -- ============ Tabs ============
+    local PovTab  = window:CreateTab("Camera / POV", 0)
+    local MainTab = window:CreateTab("Main Features", 0)
+    local EspTab  = window:CreateTab("ESP Features", 0)
+
+    -- ============ Tab POV ============
+    PovTab:AddSlider({
+        Text = "Góc Nhìn (FOV / POV)",
+        Name = "FOVSlider",
+        Min = 50,
+        Max = 120,
+        Default = math.floor(OldFOV),
+        Flag = "SliderFOV",
+        Callback = function(Value)
+            ValueFieldOfView = Value
+        end
+    })
+
+    PovTab:AddToggle({
+        Text = "Bật Chỉnh POV Custom",
+        Name = "ToggleFOV",
+        CurrentValue = false,
+        Flag = "ToggleFOVFlag",
+        Callback = function(Value)
+            ActiveModifiedFieldOfView = Value
+            if not Value then
+                pcall(function()
+                    LocalPlayer.PlayerData.Settings.Game.FieldOfView.Value = OldFOV
+                end)
+                workspace.CurrentCamera.FieldOfView = OldFOV
+            end
+        end
+    })
+
+    -- ============ Tab Main Features ============
+    MainTab:AddToggle({
+        Text = "Auto Generator (Every 2.5s)",
+        Name = "PlayerActiveAutoGeneratorToggle",
+        CurrentValue = false,
+        Callback = function(Value)
+            ActiveAutoGenerator = Value
+        end,
+    })
+
+    MainTab:AddToggle({
+        Text = "Infinite Stamina",
+        Name = "PlayerActiveInfStaminaToggle",
+        CurrentValue = false,
+        Callback = function(Value)
+            ActiveInfiniteStamina = Value
+        end,
+    })
+
+    MainTab:AddToggle({
+        Text = "Auto Kill Survivors (Jason)",
+        Name = "PlayerActiveAutoKillSurvivorsToggle",
+        CurrentValue = false,
+        Callback = function(Value)
+            ActiveAutoKillSurvivors = Value
+        end,
+    })
+
+    -- ============ Tab ESP Features ============
+    EspTab:AddToggle({
+        Text = "ESP Survivors",
+        Name = "EspSurvivorsToggle",
+        CurrentValue = false,
+        Callback = function(Value)
+            ActiveEspSurvivors = Value
+            if ActiveEspSurvivors then
+                pcall(function()
+                    for _, target in pairs(workspace.Players.Survivors:GetChildren()) do
+                        if target:IsA("Model") and target:FindFirstChild("Head") then
+                            local username = target:GetAttribute("Username") or target.Name
+                            CreateEsp(target, Color3.fromRGB(0, 255, 0), target.Name .. " (" .. username .. ")", target.Head, 2)
+                        end
+                    end
+                end)
+            else
+                pcall(function()
+                    for _, target in pairs(workspace.Players.Survivors:GetChildren()) do
+                        ClearEsp(target)
+                    end
+                end)
+            end
+        end,
+    })
+
+    EspTab:AddToggle({
+        Text = "ESP Killers",
+        Name = "EspKillers",
+        CurrentValue = false,
+        Callback = function(Value)
+            ActiveEspKillers = Value
+            if ActiveEspKillers then
+                pcall(function()
+                    for _, target in pairs(workspace.Players.Killers:GetChildren()) do
+                        if target:IsA("Model") and target:FindFirstChild("Head") then
+                            local username = target:GetAttribute("Username") or target.Name
+                            CreateEsp(target, Color3.fromRGB(255, 0, 0), target.Name .. " (" .. username .. ")", target.Head, 2)
+                        end
+                    end
+                end)
+            else
+                pcall(function()
+                    for _, target in pairs(workspace.Players.Killers:GetChildren()) do
+                        ClearEsp(target)
+                    end
+                end)
+            end
+        end,
+    })
+
+end)
